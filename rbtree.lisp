@@ -1,6 +1,6 @@
 (defpackage rbtree
   (:use cl)
-  (:import-from compare compare-int)
+  (:import-from compare compare-fixnum)
   (:import-from util while)
   (:export new add-node remove-node find-key size))
 
@@ -13,6 +13,8 @@
 ;;;use val default
 ;;;update tests/benchmark
 
+(declaim (optimize (speed 3) (safety 0)))
+
 (struct:define node _
   (key t)
   (value t)
@@ -23,7 +25,7 @@
 (struct:define tree _
   (compare function)
   (root (or node null))
-  (size integer :init 0 :read _))
+  (size fixnum :init 0 :read _))
 
 (defun new (compare)
   (new-tree :compare compare))
@@ -80,6 +82,7 @@
 	   
 	   (rec (node key)
 	     (with-slots (compare) tree
+	       (declare (type function compare))
 	       (if node
 		   (if (eq (funcall compare key (slot-value node 'key)) :lt)
 		       (progn
@@ -97,7 +100,7 @@
 			 (if (and (eq (funcall compare key (slot-value node 'key)) :eq)
 				  (null (slot-value node 'right)))
 			     (progn
-			       (decf (slot-value tree 'size))
+			       (decf (the fixnum (slot-value tree 'size)))
 			       (values nil (slot-value node 'value)))
 			     (progn
 			       (with-slots (left right) node
@@ -116,7 +119,7 @@
 					 (setf node new-node
 					       (slot-value node 'left) l
 					       (slot-value node 'right) r))
-				       (decf (slot-value tree 'size))
+				       (decf (the fixnum (slot-value tree 'size)))
 				       (values (fix node) val)))
 				   (with-slots (right) node
 				     (multiple-value-bind (new-right val) (rec right key)
@@ -190,7 +193,7 @@
   node)
 
 (defun run-tests ()
-  (let ((tree (new #'compare-int)))
+  (let ((tree (new #'compare-fixnum)))
     (assert (add-node tree 1 'foo))
     (assert (add-node tree 2 'bar))
     (assert (add-node tree 3 'baz))
@@ -216,9 +219,9 @@
 	 (assert (remhash i tbl)))))
   
     (time
-     (let ((tree (new #'compare-int)))
+     (let ((tree (new #'compare-fixnum)))
        (dotimes (i max)
-	 (add-node tree i i))
+	 (assert (add-node tree i i)))
        (dotimes (i max)
 	 (assert (= (find-key tree i) i)))
        (dotimes (i max)
