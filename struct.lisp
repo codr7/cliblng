@@ -1,0 +1,56 @@
+(defpackage struct
+  (:use cl)
+  (:import-from util sym while)
+  (:export clone define init root))
+
+(in-package struct)
+
+(defstruct (root (:constructor struct-root)))
+
+(defmethod init (x))
+
+(defmethod clone ((x root))
+  (copy-structure x))
+
+(defun _ (s)
+  (and (symbolp s) (string= (symbol-name s) "_")))
+
+(defmacro define (name super &body slots)
+  (let ((prefix (sym 'struct- name))
+	slot-names slot-readers slot-writers)
+    `(progn
+       (defstruct (,name (:constructor ,prefix)
+			 (:copier nil)
+			 (:conc-name ,prefix)
+			 (:include ,(if (_ super) 'root super)))
+	 ,@(mapcar (lambda (f)
+		     (let ((slot-name (pop f))
+			   (slot-type (pop f))
+			   (slot-init 'nil))
+		       (push slot-name slot-names)
+		       (while f
+			 (ecase (pop f)
+			   (:init (setf slot-init (pop f)))
+			   (:read (let ((r (pop f)))
+				    (push (cons (if (_ r) slot-name r) slot-name) slot-readers)))
+			   (:write (let ((w (pop f)))
+				    (push (cons (if (_ w) slot-name w) slot-name) slot-writers)))))
+		       `(,slot-name ,slot-init :type ,(if (_ slot-type) 't slot-type))))
+	    slots))
+       (defun ,(sym 'new- name) (&rest args)
+	 (let ((x (apply #',prefix args)))
+	   (init x)
+	   x))
+       ,@(mapcar (lambda (s) (let ((ps (sym prefix s)))
+			       `(progn
+				  (fmakunbound ',ps)
+				  (fmakunbound '(setf ,ps)))))
+		 slot-names)
+       ,@(mapcar (lambda (f)
+		   `(defmethod ,(first f) ((x ,name))
+		      (slot-value x ',(rest f))))
+		 slot-readers)
+       ,@(mapcar (lambda (f)
+		   `(defmethod (setf ,(first f)) (v (x ,name))
+		      (setf (slot-value x ',(rest f)) v)))
+		 slot-writers))))
