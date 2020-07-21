@@ -37,6 +37,44 @@
 (defun compare (tree x y)
   (funcall ($tree-compare tree) x y))
 
+(defun red? (node)
+  (declare (type (or node null) node))
+  (and node ($node-red? node)))
+
+(defun rotl (node)
+  (declare (type node node))
+  (let ((r ($node-right node)))
+    (setf ($node-right node) ($node-left r)
+	  ($node-left r) node
+	  ($node-red? r) ($node-red? node)
+	  ($node-red? node) t)
+    r))
+
+(defun rotr (node)
+  (declare (type node node))
+  (let ((l ($node-left node)))
+    (setf ($node-left node) ($node-right l)
+	  ($node-right l) node
+	  ($node-red? l) ($node-red? node)
+	  ($node-red? node) t)
+    l))
+
+(defun flip (node)
+  (declare (type node node))
+  (setf ($node-red? node) (not ($node-red? node))
+	($node-red? ($node-left node)) (not ($node-red? ($node-left node)))
+	($node-red? ($node-right node)) (not ($node-red? ($node-right node)))))
+
+(defun fix (node)
+  (declare (type node node))
+  (when (red? ($node-right node))
+    (rotlf node))
+  (when (and (red? ($node-left node)) (red? ($node-left ($node-left node))))
+    (rotrf node))
+  (when (and (red? ($node-left node)) (red? ($node-right node)))
+    (flip node))
+  node)
+
 (defun add-node (tree key val)
   (declare (type tree tree))
   (labels ((rec (node key val)
@@ -138,44 +176,6 @@
 	(:eq
 	 (return))))
   (and node ($node-value node))))
-
-(defun red? (node)
-  (declare (type (or node null) node))
-  (and node ($node-red? node)))
-
-(defun rotl (node)
-  (declare (type node node))
-  (let ((r ($node-right node)))
-    (setf ($node-right node) ($node-left r)
-	  ($node-left r) node
-	  ($node-red? r) ($node-red? node)
-	  ($node-red? node) t)
-    r))
-
-(defun rotr (node)
-  (declare (type node node))
-  (let ((l ($node-left node)))
-    (setf ($node-left node) ($node-right l)
-	  ($node-right l) node
-	  ($node-red? l) ($node-red? node)
-	  ($node-red? node) t)
-    l))
-
-(defun flip (node)
-  (declare (type node node))
-  (setf ($node-red? node) (not ($node-red? node))
-	($node-red? ($node-left node)) (not ($node-red? ($node-left node)))
-	($node-red? ($node-right node)) (not ($node-red? ($node-right node)))))
-
-(defun fix (node)
-  (declare (type node node))
-  (when (red? ($node-right node))
-    (rotlf node))
-  (when (and (red? ($node-left node)) (red? ($node-left ($node-left node))))
-    (rotrf node))
-  (when (and (red? ($node-left node)) (red? ($node-right node)))
-    (flip node))
-  node)
 
 (defun run-tests ()
   (let ((tree (new #'compare-fixnum)))
