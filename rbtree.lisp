@@ -6,15 +6,9 @@
 
 (in-package rbtree)
 
-;;TODO
-;;replace node.key with tree.key function
-;;;use val default
-;;;update tests/benchmark
-
 (declaim (optimize (speed 3) (safety 0)))
 
 (struct:define node _
-  (key t)
   (value t)
   (left (or node null))
   (right (or node null))
@@ -22,6 +16,7 @@
 
 (struct:define tree _
   (compare function)
+  (key function :init #'identity)
   (root (or node null))
   (size fixnum :init 0 :read _))
 
@@ -35,7 +30,12 @@
   ($tree :compare compare))
 
 (defun compare (tree x y)
+  (declare (type tree tree))
   (funcall ($tree-compare tree) x y))
+
+(defun key (tree &key node value)
+  (declare (type tree tree) (type node node))
+  (funcall ($tree-key tree) (or value ($node-value node))))
 
 (defun red? (node)
   (declare (type (or node null) node))
@@ -75,28 +75,29 @@
     (flip node))
   node)
 
-(defun add-node (tree key val)
+(defun add-node (tree val)
   (declare (type tree tree))
-  (labels ((rec (node key val)
-	     (declare (type (or node null) node))
-	     (if node
-		 (progn
-		   (ecase (compare tree key ($node-key node))
-		     (:lt (multiple-value-bind (l ok) (rec ($node-left node) key val)
-			    (setf ($node-left node) l)
-			    (values (fix node) ok)))
-		     (:gt (multiple-value-bind (r ok) (rec ($node-right node) key val)
-			    (setf ($node-right node) r)
-			    (values (fix node) ok)))
-		     (:eq (values node nil))))
-		 (progn
-		   (incf ($tree-size tree))
-		   (values ($node :key key :value val) t)))))
-    (multiple-value-bind (new-root ok) (rec ($tree-root tree) key val)
-      (when ok
-	(setf ($node-red? new-root) nil
-	      ($tree-root tree) new-root)
-	t))))
+  (let ((key (key tree :value val)))
+    (labels ((rec (node)
+	       (declare (type (or node null) node))
+	       (if node
+		   (progn
+		     (ecase (compare tree key (key tree :node node))
+		       (:lt (multiple-value-bind (l ok) (rec ($node-left node))
+			      (setf ($node-left node) l)
+			      (values (fix node) ok)))
+		       (:gt (multiple-value-bind (r ok) (rec ($node-right node))
+			      (setf ($node-right node) r)
+			      (values (fix node) ok)))
+		       (:eq (values node nil))))
+		   (progn
+		     (incf ($tree-size tree))
+		     (values ($node :value val) t)))))
+      (multiple-value-bind (new-root ok) (rec ($tree-root tree))
+	(when ok
+	  (setf ($node-red? new-root) nil
+		($tree-root tree) new-root)
+	  t)))))
 
 (defmacro movef-red-left (node)
   `(setf ,node (move-red-left ,node)))
@@ -111,6 +112,7 @@
   node)
 
 (defun remove-min (node)
+  (declare (type node node))
   (if (null ($node-left node))
       (values nil node)
       (progn
@@ -122,20 +124,22 @@
 	  (values (fix node) new-node)))))
 
 (defun remove-node (tree key)
-  (labels ((rec (node key)
+  (declare (type tree tree))
+  (labels ((rec (node)
+	     (declare (type (or null node) node))
 	     (if node
-		 (if (eq (compare tree key ($node-key node)) :lt)
+		 (if (eq (compare tree key (key tree :node node)) :lt)
 		     (progn
 		       (when (nor (red? ($node-left node))
 				  (red? ($node-left ($node-left node))))
 			 (movef-red-left node))
-		       (multiple-value-bind (new-left val) (rec ($node-left node) key)
+		       (multiple-value-bind (new-left val) (rec ($node-left node))
 			 (setf ($node-left node) new-left)
 			 (values (fix node) val)))
 		     (progn
 		       (when (red? ($node-left node))
 			 (rotrf node))
-		       (if (and (eq (compare tree key ($node-key node)) :eq)
+		       (if (and (eq (compare tree key (key tree :node node)) :eq)
 				(null ($node-right node)))
 			   (progn
 			     (decf ($tree-size tree))
@@ -148,7 +152,7 @@
 			       (when (red? ($node-left ($node-left node)))
 				 (rotrf node)
 				 (flip node)))
-			     (if (eq (compare tree key ($node-key node)) :eq)
+			     (if (eq (compare tree key (key tree :node node)) :eq)
 				 (progn
 				   (let ((l ($node-left node))
 					 (val ($node-value node)))
@@ -158,11 +162,11 @@
 					     ($node-right node) r))
 				     (decf ($tree-size tree))
 				     (values (fix node) val)))
-				 (multiple-value-bind (new-right val) (rec ($node-right node) key)
+				 (multiple-value-bind (new-right val) (rec ($node-right node))
 				   (setf ($node-right node) new-right)
 				   (values (fix node) val)))))))
 		 (values node nil))))
-    (multiple-value-bind (new-root val) (rec ($tree-root tree) key)
+    (multiple-value-bind (new-root val) (rec ($tree-root tree))
       (when new-root
 	(setf ($node-red? new-root) nil))
       (setf ($tree-root tree) new-root)
@@ -172,7 +176,7 @@
   (declare (type tree tree))
   (let ((node ($tree-root tree)))
     (while node
-      (ecase (compare tree key ($node-key node))
+      (ecase (compare tree key (key tree :node node))
 	(:lt
 	 (setf node ($node-left node)))
 	(:gt
@@ -183,18 +187,18 @@
 
 (defun run-tests ()
   (let ((tree (new #'compare-fixnum)))
-    (assert (add-node tree 1 'foo))
-    (assert (add-node tree 2 'bar))
-    (assert (add-node tree 3 'baz))
-    (assert (not (add-node tree 3 'qux)))
-    (assert (add-node tree 4 'qux))
-    (assert (eq (remove-node tree 2) 'bar))
+    (assert (add-node tree 1))
+    (assert (add-node tree 2))
+    (assert (add-node tree 3))
+    (assert (not (add-node tree 3)))
+    (assert (add-node tree 4))
+    (assert (= (remove-node tree 2) 2))
     (assert (null (remove-node tree 2)))
     (assert (= (size tree) 3))
-    (assert (eq (find-key tree 1) 'foo))
+    (assert (= (find-key tree 1) 1))
     (assert (null (find-key tree 2)))
-    (assert (eq (find-key tree 3) 'baz))
-    (assert (eq (find-key tree 4) 'qux))))
+    (assert (= (find-key tree 3) 3))
+    (assert (= (find-key tree 4) 4))))
 
 (defun run-benchmark ()
   (let ((max 1000000))
@@ -210,7 +214,7 @@
     (time
      (let ((tree (new #'compare-fixnum)))
        (dotimes (i max)
-	 (assert (add-node tree i i)))
+	 (assert (add-node tree i)))
        (dotimes (i max)
 	 (assert (= (find-key tree i) i)))
        (dotimes (i max)
