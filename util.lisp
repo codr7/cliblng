@@ -1,9 +1,12 @@
 (defpackage util
   (:use cl)
-  (:export while
+  (:export nor while
 	   sym))
 
 (in-package util)
+
+(defmacro nor (&rest args)
+  `(not (or ,@args)))
 
 (defmacro while (cnd &body body)
   (let (($next (gensym)))

@@ -1,7 +1,7 @@
 (defpackage rbtree
   (:use cl)
   (:import-from compare compare-fixnum)
-  (:import-from util while)
+  (:import-from util nor while)
   (:export new add-node remove-node find-key size))
 
 (in-package rbtree)
@@ -111,8 +111,8 @@
 	     (if (null ($node-left node))
 		 (values nil node)
 		 (progn
-		   (when (and (not (red? ($node-left node)))
-			      (not (red? ($node-left ($node-left node)))))
+		   (when (nor (red? ($node-left node))
+			      (red? ($node-left ($node-left node))))
 		     (setf node (move-red-left node)))
 		   (multiple-value-bind (new-left new-node) (remove-min ($node-left node))
 		     (setf ($node-left node) new-left)
@@ -122,8 +122,8 @@
 	     (if node
 		 (if (eq (compare tree key ($node-key node)) :lt)
 		     (progn
-			 (when (and (not (red? ($node-left node)))
-				    (not (red? ($node-left ($node-left node)))))
+			 (when (nor (red? ($node-left node))
+				    (red? ($node-left ($node-left node))))
 			   (setf node (move-red-left node)))
 			 (multiple-value-bind (new-left val) (rec ($node-left node) key)
 			   (setf ($node-left node) new-left)
@@ -138,8 +138,8 @@
 			     (values nil ($node-value node)))
 			   (progn
 			     (when (and ($node-right node)
-					(not (red? ($node-right node)))
-					(not (red? ($node-left ($node-right node)))))
+					(nor (red? ($node-right node))
+					     (red? ($node-left ($node-right node)))))
 			       (flip node)
 			       (when (red? ($node-left ($node-left node)))
 				 (rotrf node)
