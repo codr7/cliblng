@@ -98,14 +98,16 @@
 	      ($tree-root tree) new-root)
 	t))))
 
-(defmacro move-red-left (node)
-  `(progn
-     (flip ,node)
-     (when (red? ($node-left ($node-right ,node)))
-       (rotrf ($node-right ,node))
-       (rotlf ,node)
-       (flip ,node))
-     ,node))
+(defmacro red-leftf (node)
+  `(setf ,node (move-red-left ,node)))
+
+(defun red-left (node)
+  (flip node)
+  (when (red? ($node-left ($node-right node)))
+    (rotrf ($node-right node))
+    (rotlf node)
+    (flip node))
+  node)
 
 (defun remove-min (node)
   (if (null ($node-left node))
@@ -113,7 +115,7 @@
       (progn
 	(when (nor (red? ($node-left node))
 		   (red? ($node-left ($node-left node))))
-	  (move-red-left node))
+	  (red-leftf node))
 	(multiple-value-bind (new-left new-node) (remove-min ($node-left node))
 	  (setf ($node-left node) new-left)
 	  (values (fix node) new-node)))))
@@ -125,7 +127,7 @@
 		     (progn
 		       (when (nor (red? ($node-left node))
 				  (red? ($node-left ($node-left node))))
-			 (move-red-left node))
+			 (red-leftf node))
 		       (multiple-value-bind (new-left val) (rec ($node-left node) key)
 			 (setf ($node-left node) new-left)
 			 (values (fix node) val)))
