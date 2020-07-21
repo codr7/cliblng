@@ -7,8 +7,7 @@
 (in-package rbtree)
 
 ;;TODO
-;;simplify nested slot-value calls
-;;;add slot macro
+;;replace with-slots
 ;;replace node.key with tree.key function
 ;;;use val default
 ;;;update tests/benchmark
@@ -28,7 +27,7 @@
   (size fixnum :init 0 :read _))
 
 (defun new (compare)
-  (new-tree :compare compare))
+  ($tree :compare compare))
 
 (defun add-node (tree key val)
   (declare (type tree tree))
@@ -36,7 +35,7 @@
 	     (declare (type (or node null) node))
 	     (if node
 		 (progn
-		   (ecase (funcall (slot-value tree 'compare) key (slot-value node 'key))
+		   (ecase (funcall ($tree-compare tree) key ($node-key node))
 		     (:lt (with-slots (left) node
 			    (declare (type (or node null) left))
 			    (multiple-value-bind (l ok) (rec left key val)
@@ -49,12 +48,12 @@
 			      (values (fix node) ok))))
 		     (:eq (values node nil))))
 		 (progn
-		   (incf (slot-value tree 'size))
-		   (values (new-node :key key :value val) t)))))
+		   (incf ($tree-size tree))
+		   (values ($node :key key :value val) t)))))
     (with-slots (root) tree
       (multiple-value-bind (new-root ok) (rec root key val)
 	(when ok
-	  (setf (slot-value new-root 'red?) nil
+	  (setf ($node-red? new-root) nil
 		root new-root)
 	  t)))))
 
@@ -62,64 +61,64 @@
   (labels ((move-red-left (node)
 	     (flip node)
 	     (with-slots (right) node
-	       (when (red? (slot-value right 'left))
+	       (when (red? ($node-left right))
 		 (setf right (rotr right)
 		       node (rotl node))
 		 (flip node)))
 	     node)
 		 
 	   (remove-min (node)
-	     (if (null (slot-value node 'left))
+	     (if (null ($node-left node))
 		 (values nil node)
 		 (progn
 		   (with-slots (left) node
 		     (when (and (not (red? left))
-				(not (red? (slot-value left 'left))))
+				(not (red? ($node-left left))))
 		       (setf node (move-red-left node))))
-		   (multiple-value-bind (new-left new-node) (remove-min (slot-value node 'left))
-		     (setf (slot-value node 'left) new-left)
+		   (multiple-value-bind (new-left new-node) (remove-min ($node-left node))
+		     (setf ($node-left node) new-left)
 		     (values (fix node) new-node)))))
 	   
 	   (rec (node key)
 	     (with-slots (compare) tree
 	       (declare (type function compare))
 	       (if node
-		   (if (eq (funcall compare key (slot-value node 'key)) :lt)
+		   (if (eq (funcall compare key ($node-key node)) :lt)
 		       (progn
 			 (with-slots (left) node
 			   (when (and (not (red? left))
-				      (not (red? (slot-value left 'left))))
+				      (not (red? ($node-left left))))
 			     (setf node (move-red-left node))))
 			 (with-slots (left) node
 			   (multiple-value-bind (new-left val) (rec left key)
 			     (setf left new-left)
 			     (values (fix node) val))))
 		       (progn
-			 (when (red? (slot-value node 'left))
+			 (when (red? ($node-left node))
 			   (setf node (rotr node)))
-			 (if (and (eq (funcall compare key (slot-value node 'key)) :eq)
-				  (null (slot-value node 'right)))
+			 (if (and (eq (funcall compare key ($node-key node)) :eq)
+				  (null ($node-right node)))
 			     (progn
-			       (decf (the fixnum (slot-value tree 'size)))
-			       (values nil (slot-value node 'value)))
+			       (decf ($tree-size tree))
+			       (values nil ($node-value node)))
 			     (progn
 			       (with-slots (left right) node
 				 (when (and right
 					    (not (red? right))
-					    (not (red? (slot-value right 'left))))
+					    (not (red? ($node-left right))))
 				   (flip node)
-				   (when (red? (slot-value left 'left))
+				   (when (red? ($node-left left))
 				     (setf node (rotr node))
 				     (flip node))))
-			       (if (eq (funcall compare key (slot-value node 'key)) :eq)
+			       (if (eq (funcall compare key ($node-key node)) :eq)
 				   (progn
-				     (let ((l (slot-value node 'left))
-					   (val (slot-value node 'value)))
-				       (multiple-value-bind (r new-node) (remove-min (slot-value node 'right))
+				     (let ((l ($node-left node))
+					   (val ($node-value node)))
+				       (multiple-value-bind (r new-node) (remove-min ($node-right node))
 					 (setf node new-node
-					       (slot-value node 'left) l
-					       (slot-value node 'right) r))
-				       (decf (the fixnum (slot-value tree 'size)))
+					       ($node-left node) l
+					       ($node-right node) r))
+				       (decf ($tree-size tree))
 				       (values (fix node) val)))
 				   (with-slots (right) node
 				     (multiple-value-bind (new-right val) (rec right key)
@@ -130,36 +129,35 @@
       (multiple-value-bind (new-root val) (rec root key)
 	(setf root new-root)
 	(when root
-	  (setf (slot-value new-root 'red?) nil))
+	  (setf ($node-red? new-root) nil))
 	val))))
 	  
 (defun find-key (tree key)
   (declare (type tree tree))
-  (let ((node (slot-value tree 'root)))
+  (let ((node ($tree-root tree)))
     (declare (type (or node null) node))
     (with-slots (compare) tree
       (while node
-	(ecase (funcall compare key (slot-value node 'key))
+	(ecase (funcall compare key ($node-key node))
 	  (:lt
-	   (setf node (slot-value node 'left)))
+	   (setf node ($node-left node)))
 	  (:gt
-	   (setf node (slot-value node 'right)))
+	   (setf node ($node-right node)))
 	  (:eq
 	   (return)))))
-    (when node
-      (slot-value node 'value))))
+    (and node ($node-value node))))
 
 (defun red? (node)
   (declare (type (or node null) node))
-  (and node (slot-value node 'red?)))
+  (and node ($node-red? node)))
 
 (defun rotl (node)
   (with-slots (right red?) node
    (let ((r right))
       (declare (type (or node null) right) (type node r))
-      (setf right (slot-value r 'left)
-	    (slot-value r 'left) node
-	    (slot-value r 'red?) red?
+      (setf right ($node-left r)
+	    ($node-left r) node
+	    ($node-red? r) red?
 	    red? t)
       r)))
 
@@ -168,9 +166,9 @@
   (with-slots (left red?) node
     (let ((l left))
       (declare (type (or node null) left) (type node l))
-      (setf left (slot-value l 'right)
-	    (slot-value l 'right) node
-	    (slot-value l 'red?) red?
+      (setf left ($node-right l)
+	    ($node-right l) node
+	    ($node-red? l) red?
 	    red? t)
     l)))
 
@@ -179,16 +177,16 @@
   (with-slots (left right red?) node
     (declare (type node left right) (type boolean red?))
     (setf red? (not red?)
-	  (slot-value left 'red?) (not (slot-value left 'red?))
-	  (slot-value right 'red?) (not (slot-value right 'red?)))))
+	  ($node-red? left) (not ($node-red? left))
+	  ($node-red? right) (not ($node-red? right)))))
 
 (defun fix (node)
   (declare (type node node))
-  (when (red? (slot-value node 'right))
+  (when (red? ($node-right node))
     (setf node (rotl node)))
-  (when (and (red? (slot-value node 'left)) (red? (slot-value (slot-value node 'left) 'left)))
+  (when (and (red? ($node-left node)) (red? ($node-left ($node-left node))))
     (setf node (rotr node)))
-  (when (and (red? (slot-value node 'left)) (red? (slot-value node 'right)))
+  (when (and (red? ($node-left node)) (red? ($node-right node)))
     (flip node))
   node)
 
