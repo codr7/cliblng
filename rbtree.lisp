@@ -106,7 +106,7 @@
        (rotlf ,node)
        (flip ,node))
      ,node))
-	   
+
 (defun remove-min (node)
   (if (null ($node-left node))
       (values nil node)
@@ -123,12 +123,12 @@
 	     (if node
 		 (if (eq (compare tree key ($node-key node)) :lt)
 		     (progn
-			 (when (nor (red? ($node-left node))
-				    (red? ($node-left ($node-left node))))
-			   (move-red-left node))
-			 (multiple-value-bind (new-left val) (rec ($node-left node) key)
-			   (setf ($node-left node) new-left)
-			   (values (fix node) val)))
+		       (when (nor (red? ($node-left node))
+				  (red? ($node-left ($node-left node))))
+			 (move-red-left node))
+		       (multiple-value-bind (new-left val) (rec ($node-left node) key)
+			 (setf ($node-left node) new-left)
+			 (values (fix node) val)))
 		     (progn
 		       (when (red? ($node-left node))
 			 (rotrf node))
@@ -155,9 +155,9 @@
 					     ($node-right node) r))
 				     (decf ($tree-size tree))
 				     (values (fix node) val)))
-				   (multiple-value-bind (new-right val) (rec ($node-right node) key)
-				     (setf ($node-right node) new-right)
-				     (values (fix node) val)))))))
+				 (multiple-value-bind (new-right val) (rec ($node-right node) key)
+				   (setf ($node-right node) new-right)
+				   (values (fix node) val)))))))
 		 (values node nil))))
     (multiple-value-bind (new-root val) (rec ($tree-root tree) key)
       (when new-root
@@ -176,7 +176,7 @@
 	 (setf node ($node-right node)))
 	(:eq
 	 (return))))
-  (and node ($node-value node))))
+    (and node ($node-value node))))
 
 (defun run-tests ()
   (let ((tree (new #'compare-fixnum)))
