@@ -187,10 +187,10 @@
     (assert (eq (remove-node tree 2) 'bar))
     (assert (null (remove-node tree 2)))
     (assert (= (size tree) 3))
-    (assert (equal (find-key tree 1) 'foo))
+    (assert (eq (find-key tree 1) 'foo))
     (assert (null (find-key tree 2)))
-    (assert (equal (find-key tree 3) 'baz))
-    (assert (equal (find-key tree 4) 'qux))))
+    (assert (eq (find-key tree 3) 'baz))
+    (assert (eq (find-key tree 4) 'qux))))
 
 (defun run-benchmark ()
   (let ((max 1000000))
