@@ -9,6 +9,7 @@
 (declaim (optimize (speed 3) (safety 0)))
 
 (struct:define node _
+  (key t)
   (value t)
   (left (or node null))
   (right (or node null))
@@ -16,7 +17,7 @@
 
 (struct:define tree _
   (compare function)
-  (key function :init #'identity)
+  (key function)
   (root (or node null))
   (size fixnum :init 0 :read _))
 
@@ -26,16 +27,16 @@
 (defmacro rotrf (node)
   `(setf ,node (rotr ,node)))
 
-(defun new (compare)
-  ($tree :compare compare))
+(defun new (compare &key (key #'identity))
+  ($tree :compare compare :key key))
 
 (defun compare (tree x y)
   (declare (type tree tree))
   (funcall ($tree-compare tree) x y))
 
-(defun key (tree &key node value)
-  (declare (type tree tree) (type node node))
-  (funcall ($tree-key tree) (or value ($node-value node))))
+(defun key (tree value)
+  (declare (type tree tree))
+  (funcall ($tree-key tree) value))
 
 (defun red? (node)
   (declare (type (or node null) node))
@@ -75,14 +76,14 @@
     (flip node))
   node)
 
-(defun add-node (tree val)
+(defun add-node (tree val &optional key)
   (declare (type tree tree))
-  (let ((key (key tree :value val)))
+  (let ((k (or key (key tree val))))
     (labels ((rec (node)
 	       (declare (type (or node null) node))
 	       (if node
 		   (progn
-		     (ecase (compare tree key (key tree :node node))
+		     (ecase (compare tree k ($node-key node))
 		       (:lt (multiple-value-bind (l ok) (rec ($node-left node))
 			      (setf ($node-left node) l)
 			      (values (fix node) ok)))
@@ -92,7 +93,7 @@
 		       (:eq (values node nil))))
 		   (progn
 		     (incf ($tree-size tree))
-		     (values ($node :value val) t)))))
+		     (values ($node :key k :value val) t)))))
       (multiple-value-bind (new-root ok) (rec ($tree-root tree))
 	(when ok
 	  (setf ($node-red? new-root) nil
@@ -128,7 +129,7 @@
   (labels ((rec (node)
 	     (declare (type (or null node) node))
 	     (if node
-		 (if (eq (compare tree key (key tree :node node)) :lt)
+		 (if (eq (compare tree key ($node-key node)) :lt)
 		     (progn
 		       (when (nor (red? ($node-left node))
 				  (red? ($node-left ($node-left node))))
@@ -139,7 +140,7 @@
 		     (progn
 		       (when (red? ($node-left node))
 			 (rotrf node))
-		       (if (and (eq (compare tree key (key tree :node node)) :eq)
+		       (if (and (eq (compare tree key ($node-key node)) :eq)
 				(null ($node-right node)))
 			   (progn
 			     (decf ($tree-size tree))
@@ -152,7 +153,7 @@
 			       (when (red? ($node-left ($node-left node)))
 				 (rotrf node)
 				 (flip node)))
-			     (if (eq (compare tree key (key tree :node node)) :eq)
+			     (if (eq (compare tree key ($node-key node)) :eq)
 				 (progn
 				   (let ((l ($node-left node))
 					 (val ($node-value node)))
@@ -176,7 +177,7 @@
   (declare (type tree tree))
   (let ((node ($tree-root tree)))
     (while node
-      (ecase (compare tree key (key tree :node node))
+      (ecase (compare tree key ($node-key node))
 	(:lt
 	 (setf node ($node-left node)))
 	(:gt
