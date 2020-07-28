@@ -215,7 +215,7 @@
     (time
      (let ((tree (new #'compare-fixnum)))
        (dotimes (i max)
-	 (assert (add-node tree i)))
+	 (assert (add-node tree i i)))
        (dotimes (i max)
 	 (assert (= (find-key tree i) i)))
        (dotimes (i max)
