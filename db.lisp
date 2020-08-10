@@ -1,7 +1,8 @@
 (defpackage db
-  (:use cl)
+  (:use cl compare)
+  (:import-from rb new-tree tree)
   (:import-from util dohash kw sethash sym)
-  (:export close-files column
+  (:export close-files
 	   define define-table drop
 	   exists?
 	   find-id
@@ -20,9 +21,6 @@
   (tables list)
   (indexes list))
 
-(struct:define column _
-  (name symbol))
-
 (struct:define table _
   (root root)
   (name string :read _)
@@ -30,54 +28,99 @@
   (key-file (or stream null))
   (data-file (or stream null))
   (max-id integer :init 0)
-  (records hash-table :init (make-hash-table :test 'eq)))
+  (records hash-table :init (make-hash-table :test 'eq))
+  (indexes list))
+
+(defun compare-key (x y)
+  (dotimes (i (min (length x) (length y)))
+    (let ((c (compare (aref x i) (aref y i))))
+      (unless (eq c :eq)
+	(return-from compare-key c))))
+  :eq)
+
+(struct:define index _
+  (root root)
+  (name string :read _)
+  (columns list)
+  (records rb:tree :init (rb:new-tree :compare #'compare-key)))
 
 (defmacro define (name &body forms)
   `(progn
      ,@(mapcar (lambda (f)
 		 (ecase (kw (first f))
+		   (:index
+		    (let ((n (second f)))
+		      (ensure-generic-function n)
+
+		      `(define-index ,n
+			 ,@(rest (rest f)))))
 		   (:table
-		    (let ((name (second f))
-			  (forms (rest (rest f))))
-		      `(define-table ,name
-			 ,@forms)))))
+		    `(define-table ,(second f)
+		       ,@(rest (rest f))))))
 	       forms)
 
-     (struct:define ,name root
-       ,@(mapcar (lambda (f)
-		   (ecase (kw (first f))
-		     (:table
-		      `(,(second f) (or table null) :init nil :read _))))
-		 forms))
-
      (defun ,(sym 'new- name) (path)
-       (let ((root (,(sym '$ name) :path path)))
+       (let ((root ($root :path path)))
 	 ,@(mapcar (lambda (f)
 		     (ecase (kw (first f))
+		       (:index
+			(let ((n (second f)))
+			  `(let ((idx (,(sym 'new- n) root)))
+			     (defmethod ,n ((root (eql root)))
+			       idx))))
 		       (:table
-			(let ((tn (second f)))
-			  `(setf (,(sym '$ name '- tn) root) (,(sym 'new- tn) root))))))
+			(let ((n (second f)))
+			  `(let ((tbl (,(sym 'new- n) root)))
+			     (defmethod ,n ((root (eql root)))
+			       tbl))))))
 		   forms)
 	 root))))
 
 (defmacro define-table (name &body forms)
-  `(progn
+  (ensure-generic-function name)
+
+  `(progn     
      ,@(mapcar (lambda (f)
 		 (ecase (kw (first f))
-		   (:column
-		    (let ((cn (second f)))
-		      `(defparameter ,(sym name '- cn) ($column :name ',cn))))))
+		   (:column)
+		   (:index
+		    (let ((n (second f)))
+		      (ensure-generic-function (sym name '- n))
+		      (ensure-generic-function n)
+
+		      `(define-index ,(sym name '- n)
+			 ,@(rest (rest f)))))))
 	       forms)
 
      (defun ,(sym 'new- name) (root)
        (let ((tbl ($table :root root :name ,(string-downcase (symbol-name name)))))
-	 (push-table root tbl)
+	 (push-table tbl root)
 	 ,@(mapcar (lambda (f)
 		     (ecase (kw (first f))
 		       (:column
-			`(push-column tbl ,(sym name '- (second f))))))
+			`(push-column ',(second f) tbl))
+		       (:index
+			(let ((n (second f)))
+			  `(let ((idx (,(sym 'new- name '- n) root)))
+			     (push-index idx tbl)
+			     
+			     (defmethod ,(sym name '- n) ((root (eql root)))
+			       idx)
+			     
+			     (defmethod ,n ((tbl (eql tbl)))
+			       idx))))))
 		   forms)
 	 tbl))))
+
+(defmacro define-index (name &body forms)
+  `(progn     
+     (defun ,(sym 'new- name) (root)
+       (let ((idx ($index :root root :name ,(string-downcase (symbol-name name)))))
+	 (push-index idx root)
+	 ,@(mapcar (lambda (c)
+		     `(push-column ',c idx))
+		   forms)
+	 idx))))
 
 (defmethod close-files ((root root))
   (dolist (tbl ($root-tables root))
@@ -154,17 +197,26 @@
 	   (sethash id ($table-records tbl) (rest rec)))
 	 (go next)))))
 
-(defun push-column (tbl col)
+(defmethod push-column (col (tbl table))
   (push col ($table-columns tbl)))
 
-(defun push-index (root idx)
+(defmethod push-column (col (idx index))
+  (push col ($index-columns idx)))
+
+(defmethod push-index (idx (root root))
   (push idx ($root-indexes root)))
 
-(defun push-table (root tbl)
+(defmethod push-index (idx (tbl table))
+  (push idx ($table-indexes tbl)))
+
+(defun push-table (tbl root)
   (push tbl ($root-tables root)))
 
 (defmethod record-count ((tbl table))
   (hash-table-count ($table-records tbl)))
+
+(defmethod record-count ((idx index))
+  (rb:size ($index-records idx)))
 
 (defun write-record (val file)
   (write val :stream file)

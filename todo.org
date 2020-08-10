@@ -1,2 +1,3 @@
-* add index based on rbtree
-** add test
+* finish db index
+** implement create/drop/close-files
+** add find-key + test
