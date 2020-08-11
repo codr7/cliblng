@@ -1,7 +1,7 @@
 (defpackage rb
   (:use cl compare)
   (:import-from util nor while)
-  (:export new-tree add-node remove-node find-key size tree))
+  (:export add-node clear find-key new-tree remove-node size tree))
 
 (in-package rb)
 
@@ -99,6 +99,9 @@
 		($tree-root tree) new-root)
 	  t)))))
 
+(defun clear (tree)
+  (setf ($tree-root tree) nil ($tree-size tree) 0))
+  
 (defmacro movef-red-left (node)
   `(setf ,node (move-red-left ,node)))
 

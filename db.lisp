@@ -42,6 +42,7 @@
   (root root)
   (name string :read _)
   (columns list)
+  (file (or stream null))
   (records rb:tree :init (rb:new-tree :compare #'compare-key)))
 
 (defmacro define (name &body forms)
@@ -129,14 +130,17 @@
   (dolist (idx ($root-indexes root))
     (close-files idx)))
 
-(defmacro close-file (tbl slot)
-  `(when (,slot ,tbl)
-     (close (,slot ,tbl))
-     (setf (,slot ,tbl) nil)))
+(defmacro close-file (owner slot)
+  `(when (,slot ,owner)
+     (close (,slot ,owner))
+     (setf (,slot ,owner) nil)))
 
 (defmethod close-files ((tbl table))
   (close-file tbl $table-key-file)
   (close-file tbl $table-data-file))
+
+(defmethod close-files ((idx index))
+  (close-file idx $index-file))
 
 (defmethod drop ((root root))
   (dolist (tbl ($root-tables root))
@@ -145,15 +149,31 @@
   (dolist (idx ($root-indexes root))
     (drop idx)))
 
+(defun get-path (root name ext)
+  (make-pathname :directory `(:relative ,($root-path root)) :name name :type ext))
+
+(defun table-path (tbl ext)
+  (get-path ($table-root tbl) ($table-name tbl) ext))
+
 (defmethod drop ((tbl table))
   (close-files tbl)
-  (let ((p (key-path tbl)))
+  (let ((p (table-path tbl "key")))
     (when (probe-file p)
       (delete-file p)))
-  (let ((p (data-path tbl)))
+  (let ((p (table-path tbl "dat")))
     (when (probe-file p)
       (delete-file p)))
   (clrhash ($table-records tbl)))
+
+(defun index-path (idx)
+  (get-path ($index-root idx) ($index-name idx) "idx"))
+
+(defmethod drop ((idx index))
+  (close-files idx)
+  (let ((p (index-path idx)))
+    (when (probe-file p)
+      (delete-file p)))
+  (rb:clear ($index-records idx)))
 
 (defmethod exists? ((tbl table) id)
   (gethash id ($table-records tbl)))
@@ -174,19 +194,13 @@
   (dolist (tbl ($root-tables root))
     (init tbl)))
 
-(defun table-path (tbl ext)
-  (make-pathname :directory `(:relative ,($root-path ($table-root tbl))) :name ($table-name tbl) :type ext))
-
-(defun key-path (tbl)
-  (table-path tbl "key"))
-
-(defun data-path (tbl)
-  (table-path tbl "dat"))
-
 (defmethod init ((tbl table))
-  (ensure-directories-exist (key-path tbl))
-  (setf ($table-key-file tbl) (open (key-path tbl) :direction :io :if-exists :overwrite :if-does-not-exist :create))
-  (setf ($table-data-file tbl) (open (data-path tbl) :direction :io :if-exists :append :if-does-not-exist :create))
+  (let ((p (table-path tbl "key")))
+    (ensure-directories-exist p)
+    (setf ($table-key-file tbl) (open p :direction :io :if-exists :overwrite :if-does-not-exist :create)))
+  
+  (setf ($table-data-file tbl)
+	(open (table-path tbl "dat") :direction :io :if-exists :append :if-does-not-exist :create))
   
   (tagbody
    next
@@ -195,6 +209,18 @@
 	 (let ((id (first rec)))
 	   (setf ($table-max-id tbl) (max ($table-max-id tbl) id))
 	   (sethash id ($table-records tbl) (rest rec)))
+	 (go next)))))
+
+(defmethod init ((idx index))
+  (let ((p (index-path idx)))
+    (ensure-directories-exist p)
+    (setf ($index-file idx) (open p :direction :io :if-exists :overwrite :if-does-not-exist :create)))
+  
+  (tagbody
+   next
+     (let ((rec (read ($index-file idx) nil)))
+       (when rec
+	 (rb:add-node ($index-records idx) (rest rec) (first rec))
 	 (go next)))))
 
 (defmethod push-column (col (tbl table))
