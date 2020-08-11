@@ -5,12 +5,11 @@
   (:export close-files
 	   define define-table drop
 	   exists?
-	   find-id
-	   get-id
+	   field find-id
 	   init
-	   name
+	   name new-record next-id
 	   push-column push-index push-table
-	   record-count root
+	   record= record-count root
 	   store
 	   table))
 
@@ -24,7 +23,8 @@
 (struct:define table _
   (root root)
   (name string :read _)
-  (columns list)
+  (columns vector :init (make-array 0 :adjustable t))
+  (column-lookup hash-table :init (make-hash-table :test 'eq))
   (key-file (or stream null))
   (data-file (or stream null))
   (max-id integer :init 0)
@@ -114,14 +114,13 @@
 	 tbl))))
 
 (defmacro define-index (name &body forms)
-  `(progn     
-     (defun ,(sym 'new- name) (root)
+  `(defun ,(sym 'new- name) (root)
        (let ((idx ($index :root root :name ,(string-downcase (symbol-name name)))))
 	 (push-index idx root)
 	 ,@(mapcar (lambda (c)
 		     `(push-column ',c idx))
 		   forms)
-	 idx))))
+	 idx)))
 
 (defmethod close-files ((root root))
   (dolist (tbl ($root-tables root))
@@ -176,16 +175,21 @@
   (rb:clear ($index-records idx)))
 
 (defmethod exists? ((tbl table) id)
-  (gethash id ($table-records tbl)))
+  (not (null (gethash id ($table-records tbl)))))
+
+(defun field (col tbl rec)
+  (let ((i (gethash col ($table-column-lookup tbl))))
+    (aref rec i)))
+
+(defun (setf field) (val col tbl rec)
+  (let ((i (gethash col ($table-column-lookup tbl))))
+    (setf (aref rec i) val)))
 
 (defun find-id (tbl id)
   (let ((pos (gethash id ($table-records tbl))))
     (when pos
       (file-position ($table-data-file tbl) pos)
       (read ($table-data-file tbl) nil))))
-
-(defun get-id (tbl)
-  (incf ($table-max-id tbl)))
 
 (defmethod init ((root root))
   (dolist (idx ($root-indexes root))
@@ -223,8 +227,15 @@
 	 (rb:add-node ($index-records idx) (rest rec) (first rec))
 	 (go next)))))
 
+(defun new-record (tbl)
+  (make-array (length ($table-columns tbl)) :initial-element nil))
+
+(defun next-id (tbl)
+  (incf ($table-max-id tbl)))
+
 (defmethod push-column (col (tbl table))
-  (push col ($table-columns tbl)))
+  (setf (gethash col ($table-column-lookup tbl)) (length ($table-columns tbl)))
+  (vector-push-extend col ($table-columns tbl)))
 
 (defmethod push-column (col (idx index))
   (push col ($index-columns idx)))
@@ -237,6 +248,9 @@
 
 (defun push-table (tbl root)
   (push tbl ($root-tables root)))
+
+(defun record= (x y)
+  (equalp x y))
 
 (defmethod record-count ((tbl table))
   (hash-table-count ($table-records tbl)))
