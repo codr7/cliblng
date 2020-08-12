@@ -1,1 +1,2 @@
-** add repl
+* add generalized stack based vm
+** use vector for stack
