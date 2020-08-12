@@ -6,7 +6,7 @@
            close-files
 	   define define-table drop
 	   exists?
-	   field find-id
+	   field find-id find-key
 	   index-key init
 	   name new-record next-id
 	   push-column push-index push-table
@@ -191,6 +191,9 @@
     (when pos
       (file-position ($table-data-file tbl) pos)
       (read ($table-data-file tbl) nil))))
+
+(defun find-key (key idx)
+  (rb:find-key key ($index-records idx)))
 
 (defmethod init ((root root))
   (dolist (idx ($root-indexes root))

@@ -175,7 +175,7 @@
       (setf ($tree-root tree) new-root)
       val)))
 
-(defun find-key (tree key)
+(defun find-key (key tree)
   (declare (type tree tree))
   (let ((node ($tree-root tree)))
     (while node
@@ -198,10 +198,10 @@
     (assert (= (remove-node 2 tree) 2))
     (assert (null (remove-node 2 tree)))
     (assert (= (size tree) 3))
-    (assert (= (find-key tree 1) 1))
-    (assert (null (find-key tree 2)))
-    (assert (= (find-key tree 3) 3))
-    (assert (= (find-key tree 4) 4))))
+    (assert (= (find-key 1 tree) 1))
+    (assert (null (find-key 2 tree)))
+    (assert (= (find-key 3 tree) 3))
+    (assert (= (find-key 4 tree) 4))))
 
 (defun run-benchmark ()
   (let ((max 1000000))
@@ -217,8 +217,8 @@
     (time
      (let ((tree (new-tree)))
        (dotimes (i max)
-	 (assert (add-node i tree :key i)))
+	 (assert (add-node i tree)))
        (dotimes (i max)
-	 (assert (= (find-key tree i) i)))
+	 (assert (= (find-key i tree) i)))
        (dotimes (i max)
 	 (assert (= (remove-node i tree) i)))))))
