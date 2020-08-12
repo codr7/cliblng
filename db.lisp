@@ -1,15 +1,16 @@
 (defpackage db
   (:use cl compare)
   (:import-from rb new-tree tree)
-  (:import-from util dohash kw sethash sym)
-  (:export close-files
+  (:import-from util dohash kw let-when sethash sym)
+  (:export add-record remove-record
+           close-files
 	   define define-table drop
 	   exists?
 	   field find-id
-	   init
+	   index-key init
 	   name new-record next-id
 	   push-column push-index push-table
-	   record= record-count root
+	   record= record-count remove-record root
 	   store
 	   table))
 
@@ -41,7 +42,7 @@
 (struct:define index _
   (root root)
   (name string :read _)
-  (columns list)
+  (columns vector :init (make-array 0 :adjustable t))
   (file (or stream null))
   (records rb:tree :init (rb:new-tree :compare #'compare-key)))
 
@@ -185,7 +186,7 @@
   (let ((i (gethash col ($table-column-lookup tbl))))
     (setf (aref rec i) val)))
 
-(defun find-id (tbl id)
+(defun find-id (id tbl)
   (let ((pos (gethash id ($table-records tbl))))
     (when pos
       (file-position ($table-data-file tbl) pos)
@@ -208,11 +209,11 @@
   
   (tagbody
    next
-     (let ((rec (read ($table-key-file tbl) nil)))
-       (when rec
-	 (let ((id (first rec)))
+     (let ((id (read ($table-key-file tbl) nil)))
+       (when id
+	 (let ((pos (read ($table-key-file tbl))))
 	   (setf ($table-max-id tbl) (max ($table-max-id tbl) id))
-	   (sethash id ($table-records tbl) (rest rec)))
+	   (sethash id ($table-records tbl) pos))
 	 (go next)))))
 
 (defmethod init ((idx index))
@@ -222,9 +223,12 @@
   
   (tagbody
    next
-     (let ((rec (read ($index-file idx) nil)))
-       (when rec
-	 (rb:add-node ($index-records idx) (rest rec) (first rec))
+     (let ((key (read ($index-file idx) nil)))
+       (when key
+	 (let ((id (read ($index-file idx))))
+	   (if (zerop id)
+	       (rb:remove-node key ($index-records idx))
+	       (rb:add-node id ($index-records idx) :key key)))
 	 (go next)))))
 
 (defun new-record (tbl)
@@ -238,7 +242,7 @@
   (vector-push-extend col ($table-columns tbl)))
 
 (defmethod push-column (col (idx index))
-  (push col ($index-columns idx)))
+  (vector-push-extend col ($index-columns idx)))
 
 (defmethod push-index (idx (root root))
   (push idx ($root-indexes root)))
@@ -258,15 +262,55 @@
 (defmethod record-count ((idx index))
   (rb:size ($index-records idx)))
 
-(defun write-record (val file)
-  (write val :stream file)
-  (terpri file)
-  (force-output file))
+(defmacro do-record (file &body body)
+  `(let ((*standard-output* ,file))
+     ,@body
+     (terpri)
+     (force-output)))
 
-(defmethod store ((tbl table) id rec)
-  (with-slots (data-file key-file record-id records) tbl
-    (let ((pos (file-length ($table-data-file tbl))))
-      (file-position ($table-data-file tbl) pos)
-      (write-record (cons id pos) ($table-key-file tbl))
-      (write-record rec ($table-data-file tbl))
-      (sethash id ($table-records tbl) pos))))
+(defun index-key (rec tbl idx)
+  (let* ((n (length ($index-columns idx)))
+	 (k (make-array n)))
+    (dotimes (i n)
+      (setf (aref k i) (field (aref ($index-columns idx) i) tbl rec)))
+    k))
+
+(defun add-record (id rec tbl idx)
+  (let ((key (index-key rec tbl idx)))
+    (when (rb:add-node id ($index-records idx) :key key)
+      (do-record ($index-file idx)
+	(write key)
+	(terpri)
+	(write id))
+      t)))
+
+(defun remove-record (rec tbl idx)
+  (let ((key (index-key rec tbl idx)))
+    (when (rb:remove-node key ($index-records idx))
+      (do-record ($index-file idx)
+	(write key)
+	(terpri)
+	(write 0))
+      t)))
+
+(defun store (id rec tbl)
+  (let-when prev (find-id id tbl)
+    (dolist (idx ($table-indexes tbl))
+      (unless (remove-record rec tbl idx)
+	(error "Record missing in index ~a" ($index-name idx)))))
+    
+  (let ((pos (file-length ($table-data-file tbl))))
+    (do-record ($table-key-file tbl)
+      (write id)
+      (terpri)
+      (write pos))
+
+    (file-position ($table-data-file tbl) pos)
+    (do-record ($table-data-file tbl)
+      (write rec))
+    
+    (sethash id ($table-records tbl) pos))
+
+  (dolist (idx ($table-indexes tbl))
+    (unless (add-record id rec tbl idx)
+      (error "Duplicate key in index ~a" ($index-name idx)))))

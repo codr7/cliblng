@@ -1,4 +1,1 @@
-* finish db index
-** update table indexes in table store
-*** implement index store
-** add find-key + test
+** add index find-key + test

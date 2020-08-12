@@ -1,6 +1,6 @@
 (defpackage util
   (:use cl)
-  (:export dohash nor while
+  (:export dohash let-when nor while
 	   kw sethash sym))
 
 (in-package util)
@@ -15,6 +15,11 @@
 	    (when ,$ok
 	      ,@body
 	            (go ,$next)))))))
+
+(defmacro let-when (var form &body body)
+  `(let ((,var ,form))
+     (when ,var
+       ,@body)))
 
 (defmacro nor (&rest args)
   `(not (or ,@args)))
