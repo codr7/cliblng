@@ -1,7 +1,7 @@
-* add record type to db
-* vm
+* lang
 ** add with-vm/with-code
 *** switch args to &key
+*** update test
 ** add func
 *** add o-call
 *** check args on stack

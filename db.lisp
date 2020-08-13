@@ -39,6 +39,9 @@
 	(return-from compare-key c))))
   :eq)
 
+(struct:define record _
+    (fields simple-vector))
+
 (struct:define index _
   (root root)
   (name string :read _)
@@ -180,11 +183,11 @@
 
 (defun field (col tbl rec)
   (let ((i (gethash col ($table-column-lookup tbl))))
-    (aref rec i)))
+    (aref ($record-fields rec) i)))
 
 (defun (setf field) (val col tbl rec)
   (let ((i (gethash col ($table-column-lookup tbl))))
-    (setf (aref rec i) val)))
+    (setf (aref ($record-fields rec) i) val)))
 
 (defun find-id (id tbl)
   (let ((pos (gethash id ($table-records tbl))))
@@ -235,7 +238,7 @@
 	 (go next)))))
 
 (defun new-record (tbl)
-  (make-array (length ($table-columns tbl)) :initial-element nil))
+  ($record :fields (make-array (length ($table-columns tbl)) :initial-element nil)))
 
 (defun next-id (tbl)
   (incf ($table-max-id tbl)))

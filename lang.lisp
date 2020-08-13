@@ -1,19 +1,19 @@
-(defpackage vm
+(defpackage lang
   (:use cl)
   (:export bool-value code
-	   new new-bool-value new-code
+	   new-bool-value new-code new-vm
 	   o-push o-when
 	   op
 	   pop-value push-op push-value
 	   to-bool to-lisp
 	   value= vm))
 
-(in-package vm)
+(in-package lang)
 
 (struct:define vm _
   (stack vector :init (make-array 0 :adjustable t)))
 
-(defun new ()
+(defun new-vm ()
   ($vm))
 
 (defun push-value (val vm)
