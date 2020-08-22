@@ -1,14 +1,16 @@
 (defpackage lang
   (:use cl)
-  (:export bool-value code
-	   new-bool-value new-code new-vm
-	   o-push o-when
-	   op
-	   pop-value push-op push-value
-	   to-bool to-lisp
-	   value= vm))
+  (:export emit emit-brint emit-push
+           new-bool-val new-text new-vm
+	   pop-val  push-val
+	   *text*
+	   val-bool to-lisp
+	   val-eq *vm*))
 
 (in-package lang)
+
+(defvar *vm*)
+(defvar *text*)
 
 (struct:define vm _
   (stack vector :init (make-array 0 :adjustable t)))
@@ -16,63 +18,65 @@
 (defun new-vm ()
   ($vm))
 
-(defun push-value (val vm)
+(defun push-val (val &key (vm *vm*))
   (vector-push-extend val ($vm-stack vm)))
 
-(defun pop-value (vm)
+(defun pop-val (&key (vm *vm*))
   (vector-pop ($vm-stack vm)))
 
-(struct:define code _
+(struct:define text _
+  (vm vm)
   (ops vector :init (make-array 0 :adjustable t)))
 
-(defun new-code ()
-  ($code))
+(defun new-text (&key (vm *vm*))
+  ($text :vm vm))
 
-(defun push-op (op code)
-  (vector-push-extend op ($code-ops code)))
+(defmethod emit (op &key (out *text*))
+  (vector-push-extend op ($text-ops out)))
 
-(defmethod to-lisp ((code code) vm out)
+(defmethod to-lisp (&key (in *text*) out)
   (eval `(lambda ()
 	     (tagbody
 		,@(reduce (lambda (out op)
-			    (to-lisp op vm out))
-			  ($code-ops code)
+			    (op-lisp op :vm ($text-vm in) :out out))
+			  ($text-ops in)
 			  :initial-value out)))))
 
-(struct:define value _
+(struct:define val _
   (data t))
 
-(defmethod value= (x y)
+(defmethod val-eq (x y)
   nil)
 
-(struct:define bool-value value)
+(struct:define bool-val val)
 
-(defun new-bool-value (data)
-  ($bool-value :data data))
+(defun new-bool-val (data)
+  ($bool-val :data data))
 
-(defmethod value= ((x bool-value) (y bool-value))
-  (eq ($value-data x) ($value-data y)))
+(defmethod val-bool ((val bool-val))
+  ($val-data val))
+
+(defmethod val-eq ((x bool-val) (y bool-val))
+  (eq ($val-data x) ($val-data y)))
   
-(defmethod to-bool ((val bool-value))
-  ($value-data val))
-
 (struct:define op _)
 
-(struct:define o-push op
-  (val value))
+(struct:define brint-op op
+  (lhs integer)
+  (true-label integer)
+  (false-label integer))
 
-(defun o-push (val code)
-  (push-op ($o-push :val val) code))
+(defmethod emit-brint (lhs true-label false-label &key (out *text*))
+  (emit ($brint-op :lhs lhs :true-label true-label :false-label false-label) :out out))
 
-(defmethod to-lisp ((op o-push) vm out)
-  (cons `(push-value ,($o-push-val op) ,vm) out))
+(defmethod op-lisp ((op brint-op) &key out (vm *vm*))
+  (cons `(go (if (= (pop-val :vm ,vm)) ,($brint-op-true-label op) ,($brint-op-false-label op))) out))
 
-(struct:define o-when op
-  (label integer))
+(struct:define push-op op
+  (val val))
 
-(defun o-when (label code)
-  (push-op ($o-when :label label) code))
+(defmethod emit-push (val &key (out *text*))
+  (emit ($push-op :val val) :out out))
 
-(defmethod to-lisp ((op o-when) vm out)
-  (cons `(when (to-bool (pop-value ,vm)) (go ,($o-when-label op))) out))
-
+(defmethod op-lisp ((op push-op) &key out (vm *vm*))
+  (cons `(push-val ,($push-op-val op) :vm ,vm) out))

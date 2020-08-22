@@ -1,8 +1,7 @@
-* lang
-** add with-vm/with-code
-*** switch args to &key
-*** update test
-** add func
-*** add o-call
-*** check args on stack
-** add fib test
+* add copy/clone ops
+** add val-copy/clone methods
+*** use val-clone in push op
+* add swap op
+* add target type
+* add call type/stack
+* add fib test

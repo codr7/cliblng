@@ -5,8 +5,8 @@
 (in-package lang-tests)
 
 (defun run ()
-  (let ((vm (lang:new-vm))
-	(c (lang:new-code)))
-    (lang:o-push (lang:new-bool-value t) c)
-    (funcall (lang:to-lisp c vm nil))
-    (assert (lang:value= (lang:pop-value vm) (lang:new-bool-value t)))))
+  (let* ((lang:*vm* (lang:new-vm))
+	 (lang:*text* (lang:new-text)))
+    (lang:emit-push (lang:new-bool-val t))
+    (funcall (lang:to-lisp))
+    (assert (lang:val-eq (lang:pop-val) (lang:new-bool-val t)))))
